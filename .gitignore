@@ -1,11 +1,32 @@
-# Local config and secrets - never commit
-.env
-CLAUDE.local.md
+# Real configs hold hostnames, account ids, profile names and users.
+# Only jenkins_cli/config.example.yaml is tracked.
 config.yaml
+config.*.yaml
 !jenkins_cli/config.example.yaml
+*.local.yaml
+*.bak
+*.bak-*
 
-# Fetched builds
+# Secrets - never commit
+.env
+.env.*
+*.pem
+*.key
+*.token
+
+# Local notes and tooling, not shipped to the repo
+CLAUDE.local.md
+.claude/
+.vscode/
+.idea/
+*.swp
+
+# Fetched builds hold real job data (in case anyone fetches into the repo)
 investigations/
+jenkins-investigations/
+params.json
+config.xml
+pipeline.groovy
 *.log
 
 # Python
@@ -15,6 +36,9 @@ __pycache__/
 build/
 dist/
 .venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # macOS
 .DS_Store
