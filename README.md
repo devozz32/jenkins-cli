@@ -1,328 +1,192 @@
 # jenkins-cli
 
-Fetch and inspect Jenkins builds on a **private Jenkins** through AWS SSM port
-forwarding, from your terminal or from Claude Code.
+<p align="center">
+  <a href="#install">install</a> ·
+  <a href="#quick-start">quick start</a> ·
+  <a href="#commands">commands</a> ·
+  <a href="docs/install.md">step-by-step install</a> ·
+  <a href="docs/configuration.md">configuration</a> ·
+  <a href="docs/how-it-works.md">how it works</a> ·
+  <a href="docs/troubleshooting.md">troubleshooting</a>
+</p>
 
-One command saves everything you need to investigate a build:
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-666666?labelColor=333333" alt="MIT license" /></a>
+  <img src="https://img.shields.io/badge/python-3.9%2B-666666?labelColor=333333" alt="Python 3.9+" />
+  <img src="https://img.shields.io/badge/platform-macOS-666666?labelColor=333333" alt="macOS" />
+  <img src="https://img.shields.io/badge/jenkins-read--only-666666?labelColor=333333" alt="read-only" />
+</p>
 
-```bash
-jenkins fetch https://jenkins.example.internal/job/my-job/42/
+---
+
+**Look at and fetch builds on a private Jenkins through an AWS SSM tunnel,
+from your terminal or from an AI agent.**
+
+- **one command per build.** `jenkins fetch <url>` saves the parameters, the
+  job config, the Jenkinsfile the build really ran, and the full log.
+- **Jenkins in the terminal.** `jenkins browse` walks folders, jobs and builds
+  with the arrow keys, and shows stages, parameters, the log and the
+  Jenkinsfile. No browser, no copying URLs.
+- **read-only, enforced.** The client sends only GET requests and refuses any
+  URL that names a Jenkins action (`build`, `stop`, `doDelete`, `replay/run`,
+  ...). Nothing is triggered, replayed or deleted.
+- **gentle on the server.** One small request per screen, cached, about 5
+  requests per second at most, and never a background poll.
+- **works with or without [`tunnels`](https://github.com/Zivgl66/tunnels).**
+  If you use it, the CLI reuses its tunnel. If not, or if it fails, the CLI
+  opens its own `aws ssm start-session` on a free port and closes it after.
+- **no secrets on disk.** The API token lives in the macOS Keychain; the config
+  file only holds a reference to it.
+- **several Jenkins servers.** Dev, staging, prod: each with its own account,
+  jump host and token. A pasted URL picks the right one.
+- **agents can drive it.** A bundled skill teaches Claude Code to fetch a build
+  and investigate it from the files. [how to install it](docs/agent-skill.md)
+- **small.** Plain Python, `pyyaml` is the only dependency.
+
+```console
+$ jenkins fetch https://jenkins.example.internal/job/team/job/deploy/42/
+Connection: tunnels (dev/jenkins), port 53122
+
+Build:  https://jenkins.example.internal/job/team/job/deploy/42
+Output: /Users/you/jenkins-investigations/deploy-42/
+...
+  Result: FAILURE
+  Parameters (2):
+    BRANCH: main [StringParameterDefinition] (build)
+    ENV: dev [ChoiceParameterDefinition] (build)
+...
+Done. All files in /Users/you/jenkins-investigations/deploy-42/
 ```
 
 ```
-~/jenkins-investigations/my-job-42/
-├── params.json       # parameters the build ran with (and the job defaults)
+~/jenkins-investigations/deploy-42/
+├── params.json       # parameters the build ran with, and the job defaults
 ├── config.xml        # job definition: repo, branch, script path, triggers
 ├── pipeline.groovy   # the Jenkinsfile the build actually ran
 └── pipeline.log      # full console output
 ```
 
-**Read-only:** it never triggers builds or changes job configuration. The
-client sends only GET requests, refuses any URL that names a Jenkins action
-(`build`, `stop`, `doDelete`, `replay/run`, ...), and sends at most about 5
-requests per second.
+## Requirements
 
----
+macOS, plus:
 
-## How it works
+| Tool | Install |
+| --- | --- |
+| `aws` CLI v2, with a profile allowed to start SSM sessions | `brew install awscli` |
+| `session-manager-plugin` | `brew install --cask session-manager-plugin` |
+| `pipx` | `brew install pipx && pipx ensurepath` |
+| [`tunnels`](https://github.com/Zivgl66/tunnels) *(optional)* | `pipx install git+https://github.com/Zivgl66/tunnels.git` |
 
-```
-jenkins CLI ──► 127.0.0.1:<free port> ──► AWS SSM session ──► jump host ──► Jenkins :443
-```
-
-1. Reads your settings from `~/.jenkins-cli/config.yaml`.
-2. Checks your AWS session and runs `aws sso login` if it has expired.
-3. Opens a tunnel: through the [`tunnels`](https://github.com/Zivgl66/tunnels)
-   CLI if you've configured it, otherwise its own `aws ssm start-session` on a
-   free local port. If `tunnels` is not installed or can't bring its tunnel up,
-   it falls back to the plain SSM settings and says so.
-4. Calls the Jenkins REST API with your user and API token (from the macOS Keychain).
-5. Saves the four files and closes the tunnel.
-
----
+Python 3.9 or newer. You also need a Jenkins API token (Jenkins → your user →
+**Configure** → **API Token**), and a jump host with a running SSM agent that
+can reach Jenkins on port 443.
 
 ## Install
 
-Requirements: macOS, Python 3.9+, [pipx](https://pipx.pypa.io), AWS CLI v2, the
-Session Manager plugin (`brew install --cask session-manager-plugin`), and an
-AWS profile allowed to start SSM sessions on the jump host.
-
 ```bash
-pipx install git+https://github.com/<owner>/jenkins-cli.git
-jenkins init                 # interactive setup
-jenkins status               # test the connection
-jenkins skill install        # optional: the Claude Code skill
+pipx install git+https://github.com/<owner>/jenkins-cli.git && jenkins init
 ```
 
-Step-by-step guide, every `init` prompt explained, and troubleshooting:
-**[INSTALL.md](INSTALL.md)**.
+`jenkins init` asks for the Jenkins URL, your user, the API token (stored in
+the Keychain) and how to reach Jenkins, then writes
+`~/.jenkins-cli/config.yaml`. Run it again to change a value, or
+`jenkins init --name prd` to add another Jenkins.
 
----
+`jenkins --version` prints the installed version. `jenkins update` installs the
+latest GitHub release and refreshes the agent skill.
+
+Every prompt explained, AWS SSO, and setting up `tunnels`:
+**[docs/install.md](docs/install.md)**.
+
+## Quick start
+
+```bash
+jenkins status                                                   # config, tunnel, Jenkins login
+jenkins browse                                                   # look around
+jenkins builds https://jenkins.example.internal/job/deploy/      # last 20 builds
+jenkins fetch  https://jenkins.example.internal/job/deploy/42/   # save build 42
+```
+
+`status` should end with `Jenkins : OK as <you>`. If it doesn't, see
+[troubleshooting](docs/troubleshooting.md).
 
 ## Commands
 
-Global options (put them before the command):
+| Command | What it does |
+| --- | --- |
+| `jenkins browse [url]` | Jenkins in the terminal: folders → jobs → last 15 builds → stages, parameters, log, Jenkinsfile. Starts at the top, or at the folder, job or build in `url`. [Keys below](#keys-in-browse) |
+| `jenkins builds <job-url>` | A job's builds, newest first: number, result, start, duration, who started it. `-n` builds per page (max 100, default 20), `-p 2` the next page back |
+| `jenkins fetch <url>` | Save `params.json`, `config.xml`, `pipeline.groovy`, `pipeline.log` for a build URL, or for the latest build of a job URL |
+| `jenkins fetch <job-url> --skip-aborted` | The latest build that was not ABORTED |
+| `jenkins fetch <url> -o <dir>` | Save somewhere else than `<output_dir>/<job>-<build>/` |
+| `jenkins fetch <url> -f` | Overwrite a folder from an earlier fetch (otherwise you are asked) |
+| `jenkins status` | Check the config, open the tunnel, log in to Jenkins, and show which way it connected |
+| `jenkins init [--name N]` | Create or extend the config; stores the token in the Keychain |
+| `jenkins -i <name> <command>` | Use that Jenkins from the config instead of the one matched by the URL |
+| `jenkins skill [install\|uninstall]` | Install the agent skill into `~/.claude/skills/` (`--link` to symlink it). No argument: show where it is |
+| `jenkins update` | Install the latest GitHub release. `--check` only looks |
+| `jenkins --version` | Print the installed version |
 
-| Option | What it does |
-|---|---|
-| `-i, --instance NAME` | Use this Jenkins instance from the config. Default: the one whose host matches the URL, then `default` |
-| `--version` | Print the installed version |
-| `-h, --help` | Help for `jenkins` or any command (`jenkins fetch -h`) |
+Job URLs copied from a view (`.../view/My%20View/job/deploy/42/`) and jobs in
+folders (`.../job/team/job/deploy/`) work as they are.
 
-### `jenkins init`
+`jenkins` on its own, `jenkins --help`, `status` and `init` show the logo when a
+terminal is attached. Piped output never has it, and `NO_COLOR=1` turns colour
+off.
 
-Interactive setup. Creates or extends `~/.jenkins-cli/config.yaml` and stores
-the API token in the macOS Keychain.
+### Keys in browse
 
-| Option | What it does |
-|---|---|
-| `--name NAME` | Name of the instance to create or edit (default: ask). Use a new name to add a second Jenkins |
+| Key | What it does |
+| --- | --- |
+| `↑` `↓` `PgUp` `PgDn` `g` `G` | Move, page, top, end |
+| `Enter` / `→` | Open the folder, job or build |
+| `←` / `Backspace` | Back |
+| `/` | Filter a list, or search a log (`n` / `N` next, previous) |
+| `l` `j` `f` | On a build: log (opens at the end), Jenkinsfile, save the 4 files like `fetch` |
+| `r` | Reload this screen from Jenkins |
+| `q` | Quit. Prints how many requests were sent |
 
-Run it again any time to change a value.
+## Docs
 
-### `jenkins status`
+- [install, step by step](docs/install.md): every `init` prompt, AWS SSO,
+  setting up `tunnels`, update and uninstall
+- [configuration](docs/configuration.md): the config file, every key, several
+  Jenkins servers, the `tunnels` target
+- [how it works](docs/how-it-works.md): the two ways to connect and the
+  fallback, the read-only lock, what each command asks Jenkins for
+- [agent skill](docs/agent-skill.md): let Claude Code fetch and investigate
+  builds for you
+- [troubleshooting](docs/troubleshooting.md): every error message, and the
+  known limits
+- [backlog](docs/BACKLOG.md): what is not built yet
+- [changelog](CHANGELOG.md)
 
-Checks the config, opens the tunnel, and logs in to Jenkins.
-
-```
-Config     : /Users/you/.jenkins-cli/config.yaml
-Instance   : main (https://jenkins.example.internal)
-Output dir : /Users/you/jenkins-investigations
-Connection : tunnels (dev/jenkins)
-Local port : 53122
-Jenkins    : OK as jdoe
-```
-
-### `jenkins fetch <url>`
-
-Saves `params.json`, `config.xml`, `pipeline.groovy` and `pipeline.log` for a build.
-
-| Usage | What it fetches |
-|---|---|
-| `jenkins fetch <build-url>` | That build (`.../job/my-job/42/`) |
-| `jenkins fetch <job-url>` | The latest build of the job (`.../job/my-job/`) |
-| `jenkins fetch --skip-aborted <job-url>` | The latest build that was not ABORTED |
-
-| Option | What it does |
-|---|---|
-| `-o, --output DIR` | Save to this folder instead of `<output_dir>/<job>-<build>/` |
-| `--skip-aborted` | With a job URL: skip ABORTED builds |
-| `-f, --force` | Overwrite the output folder if it already has files (otherwise you are asked) |
-
-Jobs inside folders work too (`.../job/team/job/my-job/42/`). The output
-folder is named after the last job name and the build number.
-
-### `jenkins browse [url]`
-
-The Jenkins website in your terminal, read-only. Go through folders, jobs and
-builds with the arrow keys, and open a build to see its stages, parameters,
-log and Jenkinsfile.
-
-```
- jenkins-cli  │  main  https://jenkins.example.internal  │  tunnels (dev/jenkins)  │  read-only
- /  ›  /team  ›  deploy  (builds)
- ✗ #42     FAILURE    2026-01-13 16:16    0m31s  jdoe
- ✓ #41     SUCCESS    2026-01-12 09:40    4m45s  timer
-   … older builds (next 15)
- 2/3   GET requests: 3
- Enter open  ← back  / filter  r reload  q quit
-```
-
-| Key | Where | What it does |
-|---|---|---|
-| `↑` `↓` `PgUp` `PgDn` `g` `G` | everywhere | Move, page, top, end |
-| `Enter` / `→` | lists | Open the folder, job or build |
-| `←` / `Backspace` | everywhere | Back |
-| `/` | lists / text | Filter the list / search the text (`n`, `N` = next, previous) |
-| `l` `j` `f` | a build | Log (opens at the end) / Jenkinsfile / save the 4 files like `fetch` |
-| `r` | everywhere | Reload this screen from Jenkins |
-| `q` | everywhere | Quit |
-
-- With a URL it starts there: `jenkins browse <folder, job or build URL>`.
-- With several instances in the config and no URL, it asks which Jenkins first.
-- Each screen is loaded once (one GET) and kept, so going back costs nothing.
-  The bottom line counts the requests sent; on exit it prints the total.
-- Builds come 15 at a time; the last row loads 15 older ones, down to build #1.
-
-### `jenkins builds <job-url>`
-
-Lists a job's builds, newest first: number, result, start time, duration and
-who (or what) started it. One page is loaded per request, so even jobs with
-thousands of builds are quick, and the whole history is reachable.
-
-| Option | What it does |
-|---|---|
-| `-n, --limit N` | Builds per page, max 100 (default 20) |
-| `-p, --page N` | Page number, 1 = newest. The last line tells you the command for the next page |
-
-```
-BUILD   RESULT    STARTED              TIME  STARTED BY
-#42     SUCCESS   2026-01-13 16:16    4m45s  jdoe
-#41     FAILURE   2026-01-12 09:40    0m31s  timer
-```
-
-### `jenkins skill [install | uninstall | status]`
-
-Manages the Claude Code skill (see below).
-
-| Usage | What it does |
-|---|---|
-| `jenkins skill` | Show whether the skill is installed and where |
-| `jenkins skill install` | Copy it to `~/.claude/skills/jenkins-fetch/` |
-| `jenkins skill install --link` | Symlink it instead (for editing the skill from a local checkout) |
-| `jenkins skill uninstall` | Remove it |
-
-### `jenkins update`
-
-Installs the latest GitHub release with `pipx reinstall` and refreshes the
-installed skill.
-
-| Option | What it does |
-|---|---|
-| `--check` | Only show whether a newer version exists |
-
----
-
-## Claude Code skill: `/jenkins-fetch`
-
-The package includes a [Claude Code](https://claude.com/claude-code) skill
-that teaches Claude how to use this CLI and how to investigate the saved files.
+## Develop
 
 ```bash
-jenkins skill install     # then restart Claude Code
+git clone https://github.com/<owner>/jenkins-cli.git && cd jenkins-cli
+pipx install --editable .     # your edits take effect with no reinstall
+python3 -m py_compile jenkins_cli/*.py
+jenkins status
 ```
 
-Use it in Claude Code:
+Keep the repo free of company values: no hostnames, account numbers, instance
+IDs, profile or job names. Use `jenkins.example.internal` and
+`<ssm-instance-id>`. Never add a request that is not a GET, and keep the
+read-only lock in `jenkins_cli/api.py`.
 
-```
-/jenkins-fetch https://jenkins.example.internal/job/my-job/42/
-```
+## Releasing
 
-Or just paste a build URL and ask, for example:
-
-- "Why did this build fail?"
-- "Which branch and parameters did it run with?"
-- "Where did the pipeline take this template file from?"
-- "Compare build 41 and 42."
-
-What the skill makes Claude do (and not do):
-
-- Fetch the build with `jenkins fetch`, then work from the files with `grep`
-  instead of reading whole logs.
-- Trust the console log over the parameter defaults for what actually happened.
-- Never guess job or build names, never edit your config, and never read your API token.
-- If AWS SSO opens a browser login, wait for you to approve it.
-- Map each known error message to its fix.
-
-The skill lives in [`jenkins_cli/skills/jenkins-fetch/SKILL.md`](jenkins_cli/skills/jenkins-fetch/SKILL.md).
-
----
-
-## Config
-
-`~/.jenkins-cli/config.yaml`, written by `jenkins init` (set
-`JENKINS_CLI_CONFIG` to use a different path). Full example:
-[`jenkins_cli/config.example.yaml`](jenkins_cli/config.example.yaml).
-
-```yaml
-default: main
-output_dir: ~/jenkins-investigations
-
-instances:
-  main:
-    url: https://jenkins.example.internal
-    user: your-jenkins-user
-    token: keychain:jenkins-main       # or env:VAR_NAME
-    tunnel:
-      # tunnels_target: <env>/<target>  # used when the tunnels CLI is installed
-      ssm:
-        profile: <aws-profile>
-        region: <aws-region>
-        instance: <ssm-instance-id>
-        local_port: auto
-```
-
-| Key | Required | Meaning |
-|---|---|---|
-| `default` | no | Instance used when the URL doesn't match one (default: the first) |
-| `output_dir` | no | Where builds are saved (default: `~/jenkins-investigations`) |
-| `instances.<name>.url` | yes | Jenkins base URL |
-| `instances.<name>.user` | yes | Your Jenkins username |
-| `instances.<name>.token` | yes | `keychain:<item>` or `env:<VAR>`. The token itself is never in the file |
-| `tunnel.tunnels_target` | one of these | `<env>/<target>` in the `tunnels` CLI |
-| `tunnel.ssm.profile` / `region` / `instance` | one of these | AWS profile, region and jump host for the plain SSM tunnel |
-| `tunnel.ssm.remote_host` | no | Host the jump host forwards to (default: host from `url`) |
-| `tunnel.ssm.remote_port` | no | Default `443` |
-| `tunnel.ssm.local_port` | no | `auto` (a free port) or a fixed number |
-
-You can list several instances; `fetch` picks the right one from the URL's host.
-
----
-
-## Multiple Jenkins servers
-
-One config can hold several Jenkins servers, for example a dev and a prod one,
-each with its own URL, user, token, AWS account and jump host.
-
-Add one with `init` and a new name. Existing instances are kept:
+Bump `version` in `pyproject.toml`, add the release to
+[CHANGELOG.md](CHANGELOG.md), then:
 
 ```bash
-jenkins init --name prd
+git push && git tag vX.Y.Z && git push --tags
+gh release create vX.Y.Z --generate-notes
 ```
 
-```yaml
-default: dev
-instances:
-  dev:
-    url: https://jenkins-dev.example.internal
-    user: your-user
-    token: keychain:jenkins-dev            # each instance has its own token
-    tunnel:
-      tunnels_target: dev-account/jenkins
-      ssm: { profile: <dev-profile>, region: <region>, instance: <dev-jump-host-id> }
-  prd:
-    url: https://jenkins-prd.example.internal
-    user: your-user
-    token: keychain:jenkins-prd
-    tunnel:
-      tunnels_target: prd-account/jenkins
-      ssm: { profile: <prd-profile>, region: <region>, instance: <prd-jump-host-id> }
-```
-
-Which instance a command uses:
-
-1. `-i <name>` if given: `jenkins -i prd status`
-2. Otherwise the one whose `url` host matches the URL you pass to `fetch`.
-   Paste a prod build URL and it uses the prod account, tunnel and token.
-3. Otherwise `default`. This is what `jenkins status` uses, since it has no URL.
-
-```bash
-jenkins fetch https://jenkins-dev.example.internal/job/my-job/42/   # -> dev
-jenkins fetch https://jenkins-prd.example.internal/job/my-job/42/   # -> prd
-jenkins -i prd status
-```
-
-With the `tunnels` CLI, add a `jenkins` target in each account's block
-(`dev-account`, `prd-account`) and point each instance's `tunnels_target` at it.
-
-All instances share one `output_dir`. A dev and a prod job with the same name
-and build number land in the same folder; you are asked before anything is
-overwritten. Use `-o` to keep them apart.
-
----
-
-## Uninstall
-
-```bash
-jenkins skill uninstall
-pipx uninstall jenkins-cli
-rm -rf ~/.jenkins-cli
-```
-
-Then delete the token from the Keychain (one per instance; see [INSTALL.md](INSTALL.md#9-update-and-uninstall)).
-
----
+`jenkins update` on every machine picks the new release up from there.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

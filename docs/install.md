@@ -1,6 +1,7 @@
 # Installing jenkins-cli
 
-This guide takes you from zero to your first `jenkins fetch`.
+This guide takes you from zero to your first `jenkins fetch`. The short version
+is in the [README](../README.md#install).
 
 1. [Requirements](#1-requirements)
 2. [What is pipx?](#2-what-is-pipx)
@@ -178,9 +179,17 @@ start faster and reuse the same tunnel.
    pipx install git+https://github.com/Zivgl66/tunnels.git
    tunnels init
    ```
-2. Add a **host target** for Jenkins to the `tunnels` config
-   (`tunnels config` opens it): the jump host forwards to your Jenkins host on port 443.
-   Copy the shape of an existing host/database target in that file.
+2. Add a **host target** for Jenkins under the environment block that has
+   access to it (`tunnels config` opens the file):
+   ```yaml
+   <env>:
+     targets:
+       jenkins:
+         host: jenkins.example.internal   # your Jenkins host, no https://
+         port: 443
+         jump: <ssm-instance-id>          # a jump host that can reach it
+   ```
+   More on this in [configuration](configuration.md#the-tunnels-target).
 3. Check it: `tunnels up <env> jenkins`, then `tunnels status`.
 4. Run `jenkins init` again and enter `<env>/jenkins` as the **tunnels target**.
 
@@ -198,34 +207,13 @@ block there is no fallback, and the `tunnels` error is shown.
 
 ## 8. Claude Code skill: `/jenkins-fetch`
 
-The package includes a [Claude Code](https://claude.com/claude-code) skill
-that teaches Claude to use this CLI: fetch a build, then investigate the saved
-files (why it failed, what parameters it ran with, which repos and branches it
-checked out).
-
 ```bash
-jenkins skill install      # copies the skill to ~/.claude/skills/jenkins-fetch/
-jenkins skill              # shows whether it is installed and where
-jenkins skill uninstall    # removes it
+jenkins skill install      # then restart Claude Code
 ```
 
-Restart Claude Code after installing. Then either call it directly:
-
-```
-/jenkins-fetch https://jenkins.example.com/job/my-job/42/
-```
-
-or just paste a Jenkins build URL and ask a question ("why did this fail?");
-Claude picks the skill up on its own.
-
-- The skill runs the same `jenkins` commands you would. It is read-only, never
-  edits your config, and never reads your API token.
-- If your AWS SSO session has expired, approve the browser login when it opens.
-- `jenkins update` also refreshes the installed skill, so it always matches
-  your CLI version.
-- Editing the skill yourself? Use `jenkins skill install --link` from an
-  `--editable` install, so changes to `jenkins_cli/skills/jenkins-fetch/SKILL.md`
-  apply immediately.
+Then paste a build URL into Claude Code and ask ("why did this fail?"), or call
+`/jenkins-fetch <url>`. What it does and what it will never do:
+[agent skill](agent-skill.md).
 
 ---
 
@@ -250,18 +238,5 @@ security delete-generic-password -s jenkins-cli -a jenkins-main   # one per inst
 
 ## 10. Troubleshooting
 
-| Message | Cause | Fix |
-|---|---|---|
-| `jenkins: command not found` | `~/.local/bin` not on `PATH` | `pipx ensurepath`, then open a new terminal |
-| `no config file at ... run: jenkins init` | Not set up yet | `jenkins init` |
-| `no Keychain item for ...` | Token not stored | `jenkins init` and replace the token |
-| `the AWS Session Manager plugin is not installed` | Missing plugin | `brew install --cask session-manager-plugin` |
-| `AWS profile ... has no valid credentials` | Not an SSO profile, or keys expired | Fix the profile in `~/.aws/config` |
-| `SSM tunnel did not come up within 30s` | Wrong instance/region, no SSM permission, or the jump host can't reach Jenkins | Check `aws ssm describe-instance-information --profile <p> --region <r>` |
-| `HTTP 401` / `HTTP 403` | Wrong user/token, or no permission on that job | Create a new API token, run `jenkins init` |
-| `not found: /job/...` | Wrong URL | Copy the URL from the Jenkins UI |
-| `local port N is already in use` | A fixed `local_port` is taken | Set `local_port: auto` |
-| `tunnels_target is set but the 'tunnels' CLI is not installed` | `tunnels` removed. As a NOTE it still works over SSM; as an ERROR there is no `ssm` block | Install it, or add the `ssm` block (`jenkins init`) |
-| `WARNING: tunnels failed: ... Falling back to plain SSM.` | The `tunnels` target is wrong or its tunnel won't start; the command still works over SSM | `tunnels up <env> <target>` and `tunnels logs <env> <target>` to see why |
-| `/jenkins-fetch` is not offered in Claude Code | Skill not installed, or Claude Code not restarted | `jenkins skill install`, then restart Claude Code |
-| `the GitHub repo is not set yet` | Development build without a release source | Reinstall from GitHub |
+Every error message with its cause and fix, and the known limits:
+[troubleshooting](troubleshooting.md).
