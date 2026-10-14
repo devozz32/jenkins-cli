@@ -16,6 +16,7 @@
   <img src="https://img.shields.io/badge/python-3.9%2B-666666?labelColor=333333" alt="Python 3.9+" />
   <img src="https://img.shields.io/badge/platform-macOS-666666?labelColor=333333" alt="macOS" />
   <img src="https://img.shields.io/badge/jenkins-read--only-666666?labelColor=333333" alt="read-only" />
+  <a href="https://github.com/devozz32/jenkins-cli/releases"><img src="https://img.shields.io/github/v/release/devozz32/jenkins-cli?labelColor=333333&color=666666" alt="latest release" /></a>
 </p>
 
 ---
@@ -85,7 +86,7 @@ can reach Jenkins on port 443.
 ## Install
 
 ```bash
-pipx install git+https://github.com/<owner>/jenkins-cli.git && jenkins init
+pipx install git+https://github.com/devozz32/jenkins-cli.git && jenkins init
 ```
 
 `jenkins init` asks for the Jenkins URL, your user, the API token (stored in
@@ -167,7 +168,7 @@ off.
 ## Develop
 
 ```bash
-git clone https://github.com/<owner>/jenkins-cli.git && cd jenkins-cli
+git clone https://github.com/devozz32/jenkins-cli.git && cd jenkins-cli
 pipx install --editable .     # your edits take effect with no reinstall
 python3 -m py_compile jenkins_cli/*.py
 jenkins status

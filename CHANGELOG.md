@@ -6,6 +6,11 @@
 - New layout like the `tunnels` repo: short README, and `docs/` with install,
   configuration, how it works, agent skill, troubleshooting and backlog.
 - `LICENSE` file added (MIT).
+- Install commands point at `github.com/devozz32/jenkins-cli`.
+
+### Fixed
+- `jenkins update` says "no release published yet" (or "cannot reach GitHub")
+  instead of a traceback.
 
 ## [0.2.0] - 2026-10-14
 

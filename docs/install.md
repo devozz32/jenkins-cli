@@ -46,7 +46,7 @@ tunnels status                           # jenkins should show a port
 **3. Install and set up `jenkins`:**
 
 ```bash
-pipx install git+https://github.com/<owner>/jenkins-cli.git
+pipx install git+https://github.com/devozz32/jenkins-cli.git
 jenkins init
 ```
 
@@ -122,7 +122,7 @@ terminal** so `~/.local/bin` is on your `PATH`.
 **From GitHub (normal users):**
 
 ```bash
-pipx install git+https://github.com/<owner>/jenkins-cli.git
+pipx install git+https://github.com/devozz32/jenkins-cli.git
 ```
 
 **From a local folder (developing the CLI):**

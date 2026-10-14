@@ -23,7 +23,7 @@ conversation and ask for the URL rather than guessing a job name.
 
 Run `jenkins --version`. If the command is not found, the CLI is not
 installed: point the user to the install steps in the project README (`docs/install.md`)
-(`pipx install git+https://github.com/<owner>/jenkins-cli.git`, then
+(`pipx install git+https://github.com/devozz32/jenkins-cli.git`, then
 `jenkins init`) and stop. If `jenkins status` says there is no config, the
 user has to run `jenkins init` themselves.
 
