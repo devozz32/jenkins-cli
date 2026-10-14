@@ -128,7 +128,7 @@ jenkins fetch  https://jenkins.example.internal/job/deploy/42/   # save build 42
 | `jenkins init [--name N]` | Create or extend the config; stores the token in the Keychain |
 | `jenkins -i <name> <command>` | Use that Jenkins from the config instead of the one matched by the URL |
 | `jenkins skill [install\|uninstall]` | Install the agent skill into `~/.claude/skills/` (`--link` to symlink it). No argument: show where it is |
-| `jenkins update` | Install the latest GitHub release. `--check` only looks |
+| `jenkins update` | Install the latest GitHub release; asks first (`-y` skips the question). `--check` only looks |
 | `jenkins --version` | Print the installed version |
 
 Job URLs copied from a view (`.../view/My%20View/job/deploy/42/`) and jobs in

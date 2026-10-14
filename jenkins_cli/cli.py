@@ -229,7 +229,7 @@ def cmd_skill(args) -> int:
 # ─── update ─────────────────────────────────────────────────────────────────
 
 def cmd_update(args) -> int:
-    return update.run(check_only=args.check)
+    return update.run(check_only=args.check, yes=args.yes)
 
 
 # ─── main ───────────────────────────────────────────────────────────────────
@@ -310,6 +310,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("update", help="install the latest release from GitHub")
     s.add_argument("--check", action="store_true", help="only show whether an update exists")
+    s.add_argument("-y", "--yes", action="store_true", help="install without asking")
     s.set_defaults(func=cmd_update)
     return p
 

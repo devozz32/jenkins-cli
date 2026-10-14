@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -45,14 +46,21 @@ def latest_release() -> str:
         raise UpdateError(f"cannot reach GitHub: {exc.reason}") from exc
 
 
-def run(check_only: bool = False) -> int:
+def run(check_only: bool = False, yes: bool = False) -> int:
     latest = latest_release()
     print(f"installed: {__version__}   latest: {latest}")
     if _parse(latest) <= _parse(__version__):
         print("Already up to date.")
         return 0
     if check_only:
+        print("Update available. Install it with: jenkins update")
         return 0
+    if not yes:
+        if not sys.stdin.isatty():
+            raise UpdateError("not a terminal - run 'jenkins update --yes' to install without asking")
+        if input(f"Install {latest} now? [y/N]: ").strip().lower() != "y":
+            print("Not installed.")
+            return 0
     if not shutil.which("pipx"):
         raise UpdateError(f"pipx not found - install with: pipx install --force git+https://github.com/{REPO}.git")
     code = subprocess.run(["pipx", "reinstall", PACKAGE]).returncode

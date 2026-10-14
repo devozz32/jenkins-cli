@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-14
+
+### Changed
+- `jenkins update` asks `Install vX.Y.Z now? [y/N]` before installing, like
+  `tunnels update`. `-y` / `--yes` skips the question (needed when not in a
+  terminal). `--check` says how to install an available update.
+
 ## [0.2.1] - 2026-10-14
 
 ### Docs
