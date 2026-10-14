@@ -25,14 +25,19 @@ def result_of(b: dict) -> str:
 
 
 def started_by(b: dict) -> str:
+    """All causes, e.g. 'Rebuilt #484 · jdoe' or 'timer'. User names come last."""
+    reasons, users = [], []
     for action in b.get("actions") or []:
         for cause in (action or {}).get("causes") or []:
             if cause.get("userName"):
-                return cause["userName"]
+                users.append(cause["userName"])
+                continue
             desc = cause.get("shortDescription") or ""
-            if desc:
-                return desc[len("Started by "):] if desc.startswith("Started by ") else desc
-    return ""
+            if desc.startswith("Started by user "):
+                users.append(desc[len("Started by user "):])
+            elif desc:
+                reasons.append(desc[len("Started by "):] if desc.startswith("Started by ") else desc)
+    return " · ".join(dict.fromkeys(reasons + users))
 
 
 def duration(b: dict) -> str:

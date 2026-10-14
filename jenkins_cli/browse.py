@@ -40,6 +40,26 @@ LOG_ERROR = re.compile(r"ERROR|FAILED|FAILURE|Exception|error:", re.IGNORECASE)
 LOG_STAGE = re.compile(r"^\[Pipeline\] (\{ \(|stage)")
 
 
+def wrap(value: str, width: int = 80) -> list[str]:
+    """Split a long value into lines, breaking after commas or spaces where possible."""
+    out: list[str] = []
+    for line in value.splitlines() or [""]:
+        cur = ""
+        for token in re.split(r"(?<=[, ])", line):
+            while len(token) > width:
+                if cur:
+                    out.append(cur)
+                    cur = ""
+                out.append(token[:width])
+                token = token[width:]
+            if len(cur) + len(token) > width:
+                out.append(cur)
+                cur = ""
+            cur += token
+        out.append(cur)
+    return out
+
+
 def is_folder(item: dict) -> bool:
     return any(k in item.get("_class", "") for k in FOLDER_CLASSES)
 
@@ -215,7 +235,9 @@ class App:
             for p in params:
                 v = p.get("value")
                 empty = v in (None, "")
-                rows.append(Row(f"  {p['name']:<30} = {'(empty)' if empty else v}", YELLOW if empty else 0))
+                parts = ["(empty)"] if empty else wrap(str(v))
+                rows.append(Row(f"  {p['name']:<30} = {parts[0]}", YELLOW if empty else 0))
+                rows += [Row(f"  {'':<30}   {part}") for part in parts[1:]]
             if not params:
                 rows.append(Row("  (none)", GREY))
             return rows
