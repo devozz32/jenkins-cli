@@ -206,5 +206,9 @@ Expect `Jenkins : OK as <user>`. Anything else: use the table below.
 | `jenkins --version` / `jenkins update [--check]` | Version / self-update from GitHub |
 | `jenkins skill [install\|uninstall]` | Install or remove this skill (user runs it) |
 
-Planned, **not available yet**: `browse`, `log --grep`, `compare`, `list`, `clean`.
+`jenkins browse` is an interactive full-screen UI for people. **Do not run it**
+(it waits for keys); use `builds` and `fetch`. Suggest it to the user when they
+want to look around Jenkins themselves.
+
+Planned, **not available yet**: `log --grep`, `compare`, `list`, `clean`.
 Do not call them until `jenkins --help` lists them.

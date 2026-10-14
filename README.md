@@ -112,6 +112,38 @@ Saves `params.json`, `config.xml`, `pipeline.groovy` and `pipeline.log` for a bu
 Jobs inside folders work too (`.../job/team/job/my-job/42/`). The output
 folder is named after the last job name and the build number.
 
+### `jenkins browse [url]`
+
+The Jenkins website in your terminal, read-only. Go through folders, jobs and
+builds with the arrow keys, and open a build to see its stages, parameters,
+log and Jenkinsfile.
+
+```
+ jenkins-cli  │  main  https://jenkins.example.internal  │  tunnels (dev/jenkins)  │  read-only
+ /  ›  /team  ›  deploy  (builds)
+ ✗ #42     FAILURE    2026-01-13 16:16    0m31s  jdoe
+ ✓ #41     SUCCESS    2026-01-12 09:40    4m45s  timer
+   … older builds (next 50)
+ 2/3   GET requests: 3
+ Enter open  ← back  / filter  r reload  q quit
+```
+
+| Key | Where | What it does |
+|---|---|---|
+| `↑` `↓` `PgUp` `PgDn` `g` `G` | everywhere | Move, page, top, end |
+| `Enter` / `→` | lists | Open the folder, job or build |
+| `←` / `Backspace` | everywhere | Back |
+| `/` | lists / text | Filter the list / search the text (`n`, `N` = next, previous) |
+| `l` `j` `f` | a build | Log (opens at the end) / Jenkinsfile / save the 4 files like `fetch` |
+| `r` | everywhere | Reload this screen from Jenkins |
+| `q` | everywhere | Quit |
+
+- With a URL it starts there: `jenkins browse <folder, job or build URL>`.
+- With several instances in the config and no URL, it asks which Jenkins first.
+- Each screen is loaded once (one GET) and kept, so going back costs nothing.
+  The bottom line counts the requests sent; on exit it prints the total.
+- Builds come 50 at a time; the last row loads older ones, down to build #1.
+
 ### `jenkins builds <job-url>`
 
 Lists a job's builds, newest first: number, result, start time, duration and

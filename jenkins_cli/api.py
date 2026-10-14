@@ -46,6 +46,7 @@ class Jenkins:
         self._ssl.check_hostname = False
         self._ssl.verify_mode = ssl.CERT_NONE
         self._last = 0.0
+        self.requests = 0  # GETs sent, shown by `jenkins browse`
 
     @staticmethod
     def path_of(url: str) -> str:
@@ -62,6 +63,7 @@ class Jenkins:
         if wait > 0:
             time.sleep(wait)
         self._last = time.monotonic()
+        self.requests += 1
         try:
             return urlopen(req, context=self._ssl, timeout=timeout)
         except HTTPError as exc:

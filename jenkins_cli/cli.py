@@ -7,8 +7,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
-from . import __version__, awslogin, banner, builds, config, connect, fetch, secrets, skill, update
+from . import __version__, awslogin, banner, browse, builds, config, connect, fetch, secrets, skill, update
 from .api import Jenkins, JenkinsError
 
 
@@ -150,6 +151,34 @@ def cmd_builds(args) -> int:
     return 0
 
 
+# ─── browse ─────────────────────────────────────────────────────────────────
+
+def cmd_browse(args) -> int:
+    data = config.load()
+    chosen = args.instance
+    if not chosen and not args.url and len(data["instances"]) > 1:
+        names = list(data["instances"])
+        for i, n in enumerate(names, 1):
+            log(f"  {i}. {n}  ({data['instances'][n].get('url')})")
+        pick = _ask("Which Jenkins? (number)", "1")
+        chosen = names[int(pick) - 1] if pick.isdigit() and 0 < int(pick) <= len(names) else pick
+    name, inst = config.instance(data, chosen, args.url)
+    config.validate_instance(name, inst)
+    if not sys.stdout.isatty():
+        err("browse needs an interactive terminal (use builds / fetch in scripts)")
+        return 1
+    start = Jenkins.path_of(args.url) if args.url else "/"
+    with connect.open_port(inst) as (port, how):
+        jk = _client(inst, port)
+        header = f"jenkins-cli  │  {name}  {inst['url']}  │  {_describe(inst, how)}  │  read-only"
+        try:
+            browse.run(jk, inst["url"], header, config.output_dir(data), start, unquote(start) or "/")
+        except KeyboardInterrupt:
+            pass
+    log(f"Closed. {jk.requests} GET requests sent, nothing changed on Jenkins.")
+    return 0
+
+
 # ─── fetch ──────────────────────────────────────────────────────────────────
 
 def cmd_fetch(args) -> int:
@@ -169,7 +198,6 @@ def cmd_fetch(args) -> int:
                 log("Resolving latest build...")
                 number, result = fetch.latest(jk, job)
             log(f"Found: #{number} ({result})")
-        build = f"{job}/{number}"
 
         out = Path(args.output).expanduser() if args.output else config.output_dir(data) / fetch.dir_name(job, number)
         if out.exists() and any(out.iterdir()) and not args.force:
@@ -178,19 +206,7 @@ def cmd_fetch(args) -> int:
                 return 1
         out.mkdir(parents=True, exist_ok=True)
 
-        log("")
-        log(f"Build:  {inst['url'].rstrip('/')}{build}")
-        log(f"Output: {out}/")
-        log("")
-        config_raw = fetch.fetch_config(jk, job, out, log=log)
-        log("")
-        fetch.fetch_params(jk, job, build, config_raw, out, log=log)
-        log("")
-        fetch.fetch_jenkinsfile(jk, build, out, log=log)
-        log("")
-        fetch.fetch_log(jk, build, out, log=log)
-        log("")
-        log(f"Done. All files in {out}/")
+        fetch.save_build(jk, inst["url"], job, number, out, log=log)
     return 0
 
 
@@ -236,6 +252,8 @@ examples:
                                                  same for the latest build
   jenkins fetch --skip-aborted <job-url>         latest build that was not ABORTED
   jenkins fetch <build-url> -o ~/my-folder       save somewhere else
+  jenkins browse                                 Jenkins in the terminal: arrows + Enter, q to quit
+  jenkins browse <folder-or-job-url>             start inside a folder or job
   jenkins builds <job-url>                       last 20 builds: result, time, duration, who
   jenkins builds <job-url> -p 2 -n 50            older builds, 50 per page
   jenkins -i prd status                          use the instance named 'prd' from the config
@@ -267,6 +285,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("status", help="check config, tunnel and Jenkins login")
     s.set_defaults(func=cmd_status)
+
+    s = sub.add_parser("browse", help="Jenkins in the terminal: folders, jobs, builds, stages, log (read-only)")
+    s.add_argument("url", nargs="?", help="start here: a folder, job or build URL (default: the top)")
+    s.set_defaults(func=cmd_browse)
 
     s = sub.add_parser("builds", help="list a job's builds: result, start time, duration, who started it")
     s.add_argument("url", help="job URL (a build URL also works)")

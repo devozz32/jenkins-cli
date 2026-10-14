@@ -194,18 +194,25 @@ def fetch_params(jk: Jenkins, job: str, build: str, config_raw: str | None, out:
 
 # ─── Jenkinsfile + log ──────────────────────────────────────────────────────
 
+def jenkinsfile_text(jk: Jenkins, build: str) -> str | None:
+    """The script a build ran, read from its replay page (GET only; nothing is replayed)."""
+    page = jk.text(f"{build}/replay/")
+    m = re.search(r'<textarea[^>]*name="_\.mainScript"[^>]*>(.*?)</textarea>', page, re.S)
+    if not m or not m.group(1).strip():
+        return None
+    return html.unescape(m.group(1))
+
+
 def fetch_jenkinsfile(jk: Jenkins, build: str, out: Path, log=print) -> bool:
     log("Fetching Jenkinsfile...")
     try:
-        page = jk.text(f"{build}/replay/")
+        script = jenkinsfile_text(jk, build)
     except JenkinsError as exc:
         log(f"  Could not extract Jenkinsfile ({exc})")
         return False
-    m = re.search(r'<textarea[^>]*name="_\.mainScript"[^>]*>(.*?)</textarea>', page, re.S)
-    if not m or not m.group(1).strip():
+    if script is None:
         log("  Could not extract Jenkinsfile (no replay script - permissions or not a pipeline)")
         return False
-    script = html.unescape(m.group(1))
     dest = out / "pipeline.groovy"
     dest.write_text(script)
     log(f"  {script.count(chr(10)) + 1} lines -> {dest}")
@@ -219,3 +226,24 @@ def fetch_log(jk: Jenkins, build: str, out: Path, log=print) -> None:
     with open(dest, "rb") as fh:
         lines = sum(1 for _ in fh)
     log(f"  {size} bytes, {lines} lines -> {dest}")
+
+
+# ─── all four files ─────────────────────────────────────────────────────────
+
+def save_build(jk: Jenkins, base_url: str, job: str, number: int, out: Path, log=print) -> None:
+    """What `jenkins fetch` saves: config.xml, params.json, pipeline.groovy, pipeline.log."""
+    build = f"{job}/{number}"
+    out.mkdir(parents=True, exist_ok=True)
+    log("")
+    log(f"Build:  {base_url.rstrip('/')}{build}")
+    log(f"Output: {out}/")
+    log("")
+    config_raw = fetch_config(jk, job, out, log=log)
+    log("")
+    fetch_params(jk, job, build, config_raw, out, log=log)
+    log("")
+    fetch_jenkinsfile(jk, build, out, log=log)
+    log("")
+    fetch_log(jk, build, out, log=log)
+    log("")
+    log(f"Done. All files in {out}/")
