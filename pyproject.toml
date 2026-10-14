@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jenkins-cli"
+version = "0.1.0"
+description = "Fetch and inspect Jenkins builds through AWS SSM port forwarding"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = ["PyYAML>=6"]
+
+[project.scripts]
+jenkins = "jenkins_cli.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["jenkins_cli*"]
+
+[tool.setuptools.package-data]
+jenkins_cli = ["config.example.yaml", "skills/*/SKILL.md"]

@@ -1,0 +1,20 @@
+# Local config and secrets - never commit
+.env
+CLAUDE.local.md
+config.yaml
+!jenkins_cli/config.example.yaml
+
+# Fetched builds
+investigations/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+
+# macOS
+.DS_Store

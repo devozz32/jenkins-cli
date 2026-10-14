@@ -1,0 +1,24 @@
+# ~/.jenkins-cli/config.yaml
+# Created by "jenkins init". Every company-specific value lives here, never in the code.
+
+default: main
+output_dir: ~/jenkins-investigations     # where "jenkins fetch" saves builds
+
+instances:
+  main:
+    url: https://jenkins.example.internal
+    user: your-jenkins-user
+    token: keychain:jenkins-main         # stored by "jenkins init" (or env:VAR_NAME)
+
+    tunnel:
+      # Option 1: the tunnels CLI (used when installed and this is set)
+      # tunnels_target: <env>/<target>
+
+      # Option 2: plain AWS SSM (fallback)
+      ssm:
+        profile: <aws-profile>
+        region: <aws-region>
+        instance: <ssm-instance-id>
+        # remote_host: jenkins.example.internal   # default: host from url
+        # remote_port: 443                        # default: 443
+        # local_port: auto                        # default: a free port
