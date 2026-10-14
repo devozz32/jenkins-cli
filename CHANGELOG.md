@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-14
+
 ### Docs
 - New layout like the `tunnels` repo: short README, and `docs/` with install,
   configuration, how it works, agent skill, troubleshooting and backlog.
