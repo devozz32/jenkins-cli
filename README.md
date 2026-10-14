@@ -123,7 +123,7 @@ log and Jenkinsfile.
  /  ›  /team  ›  deploy  (builds)
  ✗ #42     FAILURE    2026-01-13 16:16    0m31s  jdoe
  ✓ #41     SUCCESS    2026-01-12 09:40    4m45s  timer
-   … older builds (next 50)
+   … older builds (next 15)
  2/3   GET requests: 3
  Enter open  ← back  / filter  r reload  q quit
 ```
@@ -142,7 +142,7 @@ log and Jenkinsfile.
 - With several instances in the config and no URL, it asks which Jenkins first.
 - Each screen is loaded once (one GET) and kept, so going back costs nothing.
   The bottom line counts the requests sent; on exit it prints the total.
-- Builds come 50 at a time; the last row loads older ones, down to build #1.
+- Builds come 15 at a time; the last row loads 15 older ones, down to build #1.
 
 ### `jenkins builds <job-url>`
 

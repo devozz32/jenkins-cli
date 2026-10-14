@@ -202,6 +202,7 @@ Expect `Jenkins : OK as <user>`. Anything else: use the table below.
 | `jenkins status` | Check config, tunnel and Jenkins login |
 | `jenkins fetch <url> [-o dir] [--skip-aborted] [-f]` | Save the 4 files for a build |
 | `jenkins builds <job-url> [-n 20] [-p 1]` | Build history: number, result, start, duration, who. `-p 2` = older |
+| `jenkins browse [url]` | Interactive Jenkins UI for the **user** (folders, jobs, last 15 builds, stages, log). Never run it yourself |
 | `jenkins init [--name N]` | Interactive setup (user runs it, not Claude) |
 | `jenkins --version` / `jenkins update [--check]` | Version / self-update from GitHub |
 | `jenkins skill [install\|uninstall]` | Install or remove this skill (user runs it) |

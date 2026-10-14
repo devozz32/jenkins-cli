@@ -21,7 +21,7 @@ from .api import Jenkins, JenkinsError
 ITEM_TREE = "jobs[name,_class,color,url]"
 BUILD_TREE = ("number,result,building,timestamp,duration,description,"
               "actions[causes[shortDescription,userName],parameters[name,value]]")
-PAGE = 50
+PAGE = 15  # builds per page in a job screen; the last row loads 15 older
 FOLDER_CLASSES = ("Folder", "MultiBranch", "OrganizationFolder")
 
 # color pair numbers
