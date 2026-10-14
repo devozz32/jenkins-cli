@@ -130,6 +130,12 @@ Then fetch your first build:
 jenkins fetch https://jenkins.example.com/job/my-job/42/
 ```
 
+Or look around Jenkins in the terminal (arrows + Enter, `q` to quit):
+
+```bash
+jenkins browse
+```
+
 ---
 
 ## 6. AWS SSO login
