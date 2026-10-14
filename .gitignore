@@ -15,6 +15,7 @@ config.*.yaml
 *.token
 
 # Local notes and tooling, not shipped to the repo
+CLAUDE.md
 CLAUDE.local.md
 .claude/
 .vscode/
