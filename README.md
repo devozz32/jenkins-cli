@@ -5,6 +5,7 @@
   <a href="#quick-start">quick start</a> ·
   <a href="#commands">commands</a> ·
   <a href="docs/install.md">step-by-step install</a> ·
+  <a href="docs/install.md#already-use-tunnels-the-short-path">already use tunnels?</a> ·
   <a href="docs/configuration.md">configuration</a> ·
   <a href="docs/how-it-works.md">how it works</a> ·
   <a href="docs/troubleshooting.md">troubleshooting</a>
@@ -97,6 +98,8 @@ latest GitHub release and refreshes the agent skill.
 
 Every prompt explained, AWS SSO, and setting up `tunnels`:
 **[docs/install.md](docs/install.md)**.
+Already use `tunnels`? Add one `jenkins` target and answer `init` with it:
+**[the short path](docs/install.md#already-use-tunnels-the-short-path)**.
 
 ## Quick start
 

@@ -16,6 +16,67 @@ is in the [README](../README.md#install).
 
 ---
 
+## Already use `tunnels`? The short path
+
+If [`tunnels`](https://github.com/Zivgl66/tunnels) already reaches your AWS
+account, you only add Jenkins as one more target and point `jenkins` at it.
+
+**1. Add a Jenkins target** to the block of the account that can reach
+Jenkins (`tunnels config` opens the file):
+
+```yaml
+my-env:                                  # your existing block
+  profile: <aws-profile>
+  region: <aws-region>
+  targets:
+    # ... your existing targets ...
+    jenkins:
+      host: jenkins.example.internal     # Jenkins host, no https://
+      port: 443
+      jump: <ssm-instance-id>            # a jump host that can reach Jenkins
+```
+
+**2. Check that the tunnel comes up:**
+
+```bash
+tunnels up my-env jenkins
+tunnels status                           # jenkins should show a port
+```
+
+**3. Install and set up `jenkins`:**
+
+```bash
+pipx install git+https://github.com/<owner>/jenkins-cli.git
+jenkins init
+```
+
+| `jenkins init` asks | Answer |
+|---|---|
+| Name for this Jenkins instance | a short name, e.g. `dev` |
+| Jenkins URL | `https://jenkins.example.internal` |
+| Jenkins user | your Jenkins user name |
+| API token | paste it (Jenkins → your user → **Configure** → **API Token**). Goes to the Keychain |
+| tunnels target | **`my-env/jenkins`**: the block name, a slash, the target name |
+| Configure plain AWS SSM fallback? | `y` is recommended: if `tunnels` ever fails, `jenkins` still works. Use the same profile and region as the block. The jump host must be an instance ID (`i-...`); `init` lists the online ones |
+| Output folder | where fetched builds go, e.g. `~/jenkins-investigations` |
+
+**4. Test:**
+
+```bash
+jenkins status
+```
+
+It should show `Connection : tunnels (my-env/jenkins)` and
+`Jenkins : OK as <you>`. Then try `jenkins browse`.
+
+Another Jenkins in another account? Add a `jenkins` target to that account's
+block too, and run `jenkins init --name prd` with `prd-env/jenkins`. See
+[several Jenkins servers](configuration.md#several-jenkins-servers).
+
+The rest of this guide is the full path, from nothing installed.
+
+---
+
 ## 1. Requirements
 
 | Requirement | Why | Install / check |
