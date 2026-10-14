@@ -17,7 +17,10 @@ jenkins fetch https://jenkins.example.internal/job/my-job/42/
 └── pipeline.log      # full console output
 ```
 
-**Read-only:** it never triggers builds or changes job configuration.
+**Read-only:** it never triggers builds or changes job configuration. The
+client sends only GET requests, refuses any URL that names a Jenkins action
+(`build`, `stop`, `doDelete`, `replay/run`, ...), and sends at most about 5
+requests per second.
 
 ---
 
@@ -108,6 +111,23 @@ Saves `params.json`, `config.xml`, `pipeline.groovy` and `pipeline.log` for a bu
 
 Jobs inside folders work too (`.../job/team/job/my-job/42/`). The output
 folder is named after the last job name and the build number.
+
+### `jenkins builds <job-url>`
+
+Lists a job's builds, newest first: number, result, start time, duration and
+who (or what) started it. One page is loaded per request, so even jobs with
+thousands of builds are quick, and the whole history is reachable.
+
+| Option | What it does |
+|---|---|
+| `-n, --limit N` | Builds per page, max 100 (default 20) |
+| `-p, --page N` | Page number, 1 = newest. The last line tells you the command for the next page |
+
+```
+BUILD   RESULT    STARTED              TIME  STARTED BY
+#42     SUCCESS   2026-01-13 16:16    4m45s  jdoe
+#41     FAILURE   2026-01-12 09:40    0m31s  timer
+```
 
 ### `jenkins skill [install | uninstall | status]`
 

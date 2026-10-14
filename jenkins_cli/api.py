@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import ssl
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -12,6 +14,27 @@ from urllib.request import Request, urlopen
 
 class JenkinsError(Exception):
     pass
+
+
+# Read-only lock. This client only ever sends GET requests without a body, and
+# refuses any URL whose path names a Jenkins action that changes something,
+# even if Jenkins would accept it as GET. Checked before anything is sent.
+_WRITE_ACTIONS = re.compile(
+    r"(?<!/job)(?<!/view)/(build|buildWithParameters|polling|rebuild|stop|term|kill|doDelete|doWipeOutWorkspace"
+    r"|delete|deleteBuild|configSubmit|submitDescription|toggleLogKeep|disable|enable|doRename"
+    r"|confirmRename|createItem|copy|doReload|reload|restart|safeRestart|exit|safeExit|quietDown"
+    r"|cancelQuietDown|scriptText|script|cli|input|proceed|abort|run|rebuildAll|doCreateItem"
+    r"|updateNode|toggleOffline|disconnect|launchSlaveAgent|cancelItem)(/|$)",
+    re.IGNORECASE,
+)
+_MIN_GAP = 0.2  # seconds between requests: at most ~5 per second, never a flood
+
+
+def check_read_only(path: str) -> None:
+    """Raise JenkinsError if `path` (without query) names a write action."""
+    m = _WRITE_ACTIONS.search(urlparse(path).path)
+    if m:
+        raise JenkinsError(f"refused: '{m.group(1)}' changes Jenkins and this CLI is read-only ({path})")
 
 
 class Jenkins:
@@ -22,6 +45,7 @@ class Jenkins:
         self._ssl = ssl.create_default_context()
         self._ssl.check_hostname = False
         self._ssl.verify_mode = ssl.CERT_NONE
+        self._last = 0.0
 
     @staticmethod
     def path_of(url: str) -> str:
@@ -29,10 +53,15 @@ class Jenkins:
         return urlparse(url).path.rstrip("/") if "://" in url else url.rstrip("/")
 
     def _open(self, path: str, params: dict | None = None, timeout: int = 60):
+        check_read_only(path)
         url = self.base + path
         if params:
             url += "?" + urlencode(params)  # encodes [ ] { } properly
-        req = Request(url, headers={"Authorization": self._auth})
+        req = Request(url, headers={"Authorization": self._auth}, method="GET")
+        wait = self._last + _MIN_GAP - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        self._last = time.monotonic()
         try:
             return urlopen(req, context=self._ssl, timeout=timeout)
         except HTTPError as exc:

@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import __version__, awslogin, banner, config, connect, fetch, secrets, skill, update
+from . import __version__, awslogin, banner, builds, config, connect, fetch, secrets, skill, update
 from .api import Jenkins, JenkinsError
 
 
@@ -118,6 +118,38 @@ def cmd_status(args) -> int:
         return 0 if ok else 1
 
 
+# ─── builds ─────────────────────────────────────────────────────────────────
+
+def cmd_builds(args) -> int:
+    data = config.load()
+    name, inst = config.instance(data, args.instance, args.url)
+    config.validate_instance(name, inst)
+    job, _ = fetch.split_url(Jenkins.path_of(args.url))
+    size = max(1, min(args.limit, 100))
+
+    with connect.open_port(inst) as (port, how):
+        log(f"Connection: {_describe(inst, how)}, port {port}")
+        args.page = max(1, args.page)
+        d = builds.page(_client(inst, port), job, args.page, size)
+
+    first = (d.get("firstBuild") or {}).get("number")
+    last = (d.get("lastBuild") or {}).get("number")
+    rows = d["allBuilds"]
+    log(f"Job   : {job}")
+    log(f"Builds: #{first} .. #{last}" if last else "Builds: none")
+    if not rows:
+        log(f"No builds on page {args.page}.")
+        return 0
+    log("")
+    for line in builds.table(rows, color=banner._color_ok(sys.stdout)):
+        log(line)
+    log("")
+    log(f"Page {args.page} ({len(rows)} builds)." + (
+        f" Older: jenkins builds {args.url} -p {args.page + 1}" + (f" -n {size}" if size != 20 else "")
+        if len(rows) == size and rows[-1]["number"] != first else " This is the oldest page."))
+    return 0
+
+
 # ─── fetch ──────────────────────────────────────────────────────────────────
 
 def cmd_fetch(args) -> int:
@@ -204,6 +236,8 @@ examples:
                                                  same for the latest build
   jenkins fetch --skip-aborted <job-url>         latest build that was not ABORTED
   jenkins fetch <build-url> -o ~/my-folder       save somewhere else
+  jenkins builds <job-url>                       last 20 builds: result, time, duration, who
+  jenkins builds <job-url> -p 2 -n 50            older builds, 50 per page
   jenkins -i prd status                          use the instance named 'prd' from the config
 
 Claude Code skill (/jenkins-fetch):
@@ -233,6 +267,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("status", help="check config, tunnel and Jenkins login")
     s.set_defaults(func=cmd_status)
+
+    s = sub.add_parser("builds", help="list a job's builds: result, start time, duration, who started it")
+    s.add_argument("url", help="job URL (a build URL also works)")
+    s.add_argument("-n", "--limit", type=int, default=20, help="builds per page, max 100 (default: 20)")
+    s.add_argument("-p", "--page", type=int, default=1, help="page number, 1 = newest (default: 1)")
+    s.set_defaults(func=cmd_builds)
 
     s = sub.add_parser("fetch", help="save config.xml, params.json, pipeline.groovy, pipeline.log for a build")
     s.add_argument("url", help="job URL (latest build) or build URL")

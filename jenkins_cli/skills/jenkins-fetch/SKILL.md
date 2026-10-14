@@ -55,6 +55,7 @@ jenkins fetch <job-url>              # latest build of the job
 jenkins fetch --skip-aborted <job-url>
 jenkins fetch <url> -o <dir>         # custom output folder
 jenkins -i <instance> fetch <url>    # pick an instance explicitly
+jenkins builds <job-url>             # history: which builds failed, when, who started them
 ```
 
 `fetch` prints `Connection: tunnels (<env>/<target>)` or `Connection: ssm`, then the
@@ -157,6 +158,16 @@ diff <(python3 -m json.tool ~/jenkins-investigations/deploy-41/params.json) \
 grep -nE "Checking out Revision" ~/jenkins-investigations/deploy-4{1,2}/pipeline.log
 ```
 
+**"When did this job start failing?"**
+
+```bash
+jenkins builds https://jenkins.example.internal/job/team/job/deploy/        # newest 20
+jenkins builds https://jenkins.example.internal/job/team/job/deploy/ -p 2   # the 20 before
+```
+
+Find the last SUCCESS before the failures, then fetch that build and the first
+failed one and compare them. Page instead of raising `-n` above what you need.
+
 **"Fetch 42 again"** (folder already exists)
 
 The CLI stops with `already exists (use --force to overwrite)`. Ask the user:
@@ -190,9 +201,10 @@ Expect `Jenkins : OK as <user>`. Anything else: use the table below.
 |---|---|
 | `jenkins status` | Check config, tunnel and Jenkins login |
 | `jenkins fetch <url> [-o dir] [--skip-aborted] [-f]` | Save the 4 files for a build |
+| `jenkins builds <job-url> [-n 20] [-p 1]` | Build history: number, result, start, duration, who. `-p 2` = older |
 | `jenkins init [--name N]` | Interactive setup (user runs it, not Claude) |
 | `jenkins --version` / `jenkins update [--check]` | Version / self-update from GitHub |
 | `jenkins skill [install\|uninstall]` | Install or remove this skill (user runs it) |
 
-Planned, **not available yet**: `builds`, `log --grep`, `compare`, `list`, `clean`.
+Planned, **not available yet**: `browse`, `log --grep`, `compare`, `list`, `clean`.
 Do not call them until `jenkins --help` lists them.
