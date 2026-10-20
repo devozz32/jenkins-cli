@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+- `jenkins replay <build-url>`: send the edited `pipeline.groovy` of a fetched
+  build as a Replay. Shows the diff and the parameters, asks `[y/N]` (no
+  `--yes`), runs once, follows the log, saves the new build like `fetch`, and
+  says where it failed. `--script <file>`, `--no-follow`. Off unless the
+  instance has `allow_replay: true`; refuses without a terminal.
+- The one POST in `api.py` (`replay_post`) accepts only
+  `<job>/<number>/replay/run`. Every other request is still GET only, and
+  `build`, `buildWithParameters`, `stop`, `rebuild` stay refused.
+
+### Changed
+- Skill `/jenkins-fetch`: covers `builds`, `browse` (user only) and the
+  replay flow (Claude proposes one fix, the user runs `jenkins replay`). Hard
+  rules: never trigger, replay, stop or delete; never call Jenkins outside the
+  CLI; no fix-replay loop.
+- `jenkins init` keeps `allow_replay` when re-run.
+
 ## [0.2.2] - 2026-10-14
 
 ### Changed

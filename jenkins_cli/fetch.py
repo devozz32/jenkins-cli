@@ -194,13 +194,17 @@ def fetch_params(jk: Jenkins, job: str, build: str, config_raw: str | None, out:
 
 # ─── Jenkinsfile + log ──────────────────────────────────────────────────────
 
+def replay_scripts(jk: Jenkins, build: str) -> dict:
+    """Every script box on a build's replay page: {'mainScript': ..., <loaded script>: ...} (GET only)."""
+    page = jk.text(f"{build}/replay/")
+    return {name: html.unescape(body)
+            for name, body in re.findall(r'<textarea[^>]*name="_\.([^"]+)"[^>]*>(.*?)</textarea>', page, re.S)}
+
+
 def jenkinsfile_text(jk: Jenkins, build: str) -> str | None:
     """The script a build ran, read from its replay page (GET only; nothing is replayed)."""
-    page = jk.text(f"{build}/replay/")
-    m = re.search(r'<textarea[^>]*name="_\.mainScript"[^>]*>(.*?)</textarea>', page, re.S)
-    if not m or not m.group(1).strip():
-        return None
-    return html.unescape(m.group(1))
+    script = replay_scripts(jk, build).get("mainScript", "")
+    return script if script.strip() else None
 
 
 def fetch_jenkinsfile(jk: Jenkins, build: str, out: Path, log=print) -> bool:

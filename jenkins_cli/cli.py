@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote
 
-from . import __version__, awslogin, banner, browse, builds, config, connect, fetch, secrets, skill, update
+from . import __version__, awslogin, banner, browse, builds, config, connect, fetch, replay, secrets, skill, update
 from .api import Jenkins, JenkinsError
 
 
@@ -91,6 +91,8 @@ def cmd_init(args) -> int:
         tunnel["ssm"] = {"profile": profile, "region": region, "instance": instance, "local_port": "auto"}
 
     data["instances"][name] = {"url": url, "user": user, "token": token_ref, "tunnel": tunnel}
+    if existing.get("allow_replay"):
+        data["instances"][name]["allow_replay"] = True  # set by hand; init never asks for it
     data.setdefault("default", name)
     data["output_dir"] = _ask("Output folder for fetched builds",
                               data.get("output_dir") or config.DEFAULT_OUTPUT_DIR)
@@ -210,6 +212,103 @@ def cmd_fetch(args) -> int:
     return 0
 
 
+# ─── replay ─────────────────────────────────────────────────────────────────
+
+def cmd_replay(args) -> int:
+    data = config.load()
+    name, inst = config.instance(data, args.instance, args.url)
+    config.validate_instance(name, inst)
+    job, number = fetch.split_url(Jenkins.path_of(args.url))
+    if number is None:
+        err("replay needs a build URL (with the build number), not a job URL")
+        return 1
+    if not inst.get("allow_replay"):
+        err(f"replay is off for instance '{name}'. To allow it, set  allow_replay: true  "
+            f"for that instance in {config.CONFIG_PATH}")
+        return 1
+    local = Path(args.script).expanduser() if args.script else \
+        config.output_dir(data) / fetch.dir_name(job, number) / "pipeline.groovy"
+    if not local.is_file():
+        err(f"no local copy: {local}\nRun first: jenkins fetch {args.url}")
+        return 1
+    if not sys.stdin.isatty():
+        err("replay asks before it sends anything - run it in a terminal")
+        return 1
+
+    build = f"{job}/{number}"
+    base = inst["url"].rstrip("/")
+    with connect.open_port(inst) as (port, how):
+        jk = _client(inst, port)
+        result, params = replay.build_params(jk, build)
+        log(f"Connection : {_describe(inst, how)}")
+        log(f"Build      : {unquote(job).rsplit('/job/', 1)[-1]} #{number}  ({result or 'IN_PROGRESS'})")
+        log(f"Script     : {local}")
+        log("")
+
+        scripts = fetch.replay_scripts(jk, build)
+        if not scripts.get("mainScript", "").strip():
+            err("no script on the replay page of this build (not a pipeline, or no Replay permission)")
+            return 1
+        edited = local.read_text()
+        changes = replay.diff(scripts["mainScript"], edited, f"#{number}", local, banner._color_ok(sys.stdout))
+        if not changes:
+            log(f"No changes in {local.name} compared with #{number}. Nothing to replay.")
+            return 0
+        log(f"Changes compared with #{number}:")
+        for line in changes:
+            log(line)
+        log("")
+        if params:
+            log(f"Parameters (same as #{number}, Replay can't change them):")
+            for pname, value in params:
+                log(f"  {pname} = {value if value not in (None, '') else '(empty)'}")
+            log("")
+        log("WARNING: Replay runs the pipeline for real, every stage, like Build Now.")
+        log("")
+        if _ask(f"Replay #{number} with these changes? [y/N]", "n").lower() not in ("y", "yes"):
+            log("Cancelled. Nothing was sent to Jenkins.")
+            return 0
+
+        first = replay.next_number(jk, job)
+        jk.replay_post(build, {**scripts, "mainScript": edited})
+        new = replay.wait_for_build(jk, job, first, number, log=log)
+        new_build = f"{job}/{new}"
+        log("")
+        log(f"Started    : #{new}  {base}{new_build}/")
+        if args.no_follow:
+            log(f"Not following. Later: jenkins fetch {base}{new_build}/")
+            return 0
+        log("Following log (Ctrl+C stops watching, the build keeps running)")
+        if not replay.follow(jk, new_build, out=log):
+            log("")
+            log(f"Stopped watching. #{new} keeps running: {base}{new_build}/")
+            return 0
+        res, ms = replay.final_result(jk, new_build)
+
+        out = config.output_dir(data) / fetch.dir_name(job, new)
+        saved = not (out.exists() and any(out.iterdir()))
+        if saved:
+            fetch.save_build(jk, inst["url"], job, new, out, log=lambda *_: None)
+
+    log("")
+    log(f"Result     : {res}  ({replay.duration(ms)})")
+    if res != "SUCCESS" and saved:
+        stage, lineno, line = replay.where_it_failed(out / "pipeline.log")
+        if stage:
+            log(f'Failed in  : stage "{stage}"')
+        if line:
+            log(f"Error      : pipeline.log:{lineno}  {line}")
+    log(f"Output     : {out}/" + ("" if saved else "  (already existed, not overwritten)"))
+    log("")
+    if res == "SUCCESS":
+        log("Reminder   : this change is not in git yet. Commit it to the Jenkinsfile, "
+            "or the next normal build fails again.")
+    else:
+        log(f"To try again: edit {out}/pipeline.groovy")
+        log(f"              then: jenkins replay {base}{new_build}/")
+    return 0 if res == "SUCCESS" else 1
+
+
 # ─── skill ──────────────────────────────────────────────────────────────────
 
 def cmd_skill(args) -> int:
@@ -256,6 +355,8 @@ examples:
   jenkins browse <folder-or-job-url>             start inside a folder or job
   jenkins builds <job-url>                       last 20 builds: result, time, duration, who
   jenkins builds <job-url> -p 2 -n 50            older builds, 50 per page
+  jenkins replay <build-url>                     after fetch + editing pipeline.groovy: show the diff,
+                                                 ask, run it once, follow the log (needs allow_replay)
   jenkins -i prd status                          use the instance named 'prd' from the config
 
 Claude Code skill (/jenkins-fetch):
@@ -302,6 +403,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--skip-aborted", action="store_true", help="with a job URL: skip ABORTED builds")
     s.add_argument("-f", "--force", action="store_true", help="overwrite an existing output folder")
     s.set_defaults(func=cmd_fetch)
+
+    s = sub.add_parser("replay", help="run a build again with your edited pipeline.groovy (asks first, runs once)")
+    s.add_argument("url", help="build URL (the build you fetched and edited)")
+    s.add_argument("--script", help="edited script to send (default: pipeline.groovy in that build's fetch folder)")
+    s.add_argument("--no-follow", action="store_true", help="start it and exit; don't follow the log")
+    s.set_defaults(func=cmd_replay)
 
     s = sub.add_parser("skill", help="install the Claude Code skill (/jenkins-fetch) into ~/.claude/skills")
     s.add_argument("action", nargs="?", choices=["install", "uninstall", "status"], default="status")

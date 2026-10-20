@@ -37,9 +37,10 @@ Ask `[y/N]` before reinstalling, and for an editable install run
 
 ## Considered and left out
 
-- **Triggering, replaying or stopping builds.** The tool is read-only on
+- **Triggering, rebuilding or stopping builds.** The tool is read-only on
   purpose, and enforced in code. An agent that can read builds should not be
-  able to start them.
+  able to start them. The single exception is `jenkins replay`: off by
+  default, terminal only, asks every time.
 - **Auto-refresh in `browse`.** Every refresh is a request for every open
   screen. A key (`r`) does the same, only when you want it.
 - **Loading a job's whole history at once.** `allBuilds` without a range makes
@@ -47,7 +48,7 @@ Ask `[y/N]` before reinstalling, and for an editable install run
 
 ## Known limits, by choice
 
-- Read-only: GET only, action URLs refused.
+- Read-only: GET only, action URLs refused. Only `jenkins replay` POSTs, to `<build>/replay/run`.
 - No daemon and no state of its own; `tunnels` keeps its tunnels, plain SSM
   sessions close with the command.
 - macOS first, because of the Keychain.

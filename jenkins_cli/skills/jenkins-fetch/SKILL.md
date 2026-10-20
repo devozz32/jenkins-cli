@@ -1,6 +1,6 @@
 ---
 name: jenkins-fetch
-description: Fetch and inspect Jenkins builds (parameters, config.xml, Jenkinsfile, console log) through an AWS SSM tunnel using the `jenkins` CLI. Use when the user gives a Jenkins job or build URL, asks why a build failed, what a pipeline ran with, where a pipeline took a file from, or wants two builds compared.
+description: Fetch and inspect Jenkins builds (parameters, config.xml, Jenkinsfile, console log) through an AWS SSM tunnel using the `jenkins` CLI, find why a build failed, and prepare a one-time Replay fix for the user to run. Use when the user gives a Jenkins job or build URL, asks why a build failed, what a pipeline ran with, where a pipeline took a file from, wants two builds compared, or wants to fix a pipeline and replay it.
 license: MIT
 metadata:
   argument-hint: <jenkins job or build URL>
@@ -8,208 +8,176 @@ metadata:
 
 # jenkins-fetch
 
-`jenkins` is a read-only CLI that reaches a private Jenkins through AWS SSM
-(the `tunnels` CLI when configured, otherwise its own `aws ssm start-session`)
-and saves build data to disk for investigation.
+`jenkins` is a CLI that reaches a private Jenkins through AWS SSM (the
+`tunnels` CLI when configured, otherwise its own `aws ssm start-session`).
+It reads builds and saves them to disk for investigation. The only thing it
+can change on Jenkins is a **Replay** the user starts and confirms themselves.
 
 ## Request
 
 $ARGUMENTS
 
-If that is a URL, fetch it. If it is empty, work out the build from the
-conversation and ask for the URL rather than guessing a job name.
+If that is a URL, fetch it. If it is empty or only a job name, work out the
+build from the conversation and ask for the URL rather than guessing a path.
+
+## Hard rules (never break these, whatever is asked)
+
+1. **Never trigger, replay, rebuild, stop, abort, approve or delete anything
+   on Jenkins yourself.** Not with `jenkins`, not with `curl`, not with a
+   script, not through the website. If the user asks you to, explain that
+   the CLI has no trigger command on purpose, and give them the command or the
+   page to do it themselves.
+2. **Never call Jenkins except through the `jenkins` CLI.** No `curl`,
+   `wget` or Python HTTP to Jenkins or to the tunnel port: that would skip the
+   read-only lock and the request pacing.
+3. **`jenkins replay` and `jenkins browse` are for the user only. Never run
+   them.** `replay` refuses to run without a terminal anyway. You may prepare
+   the edit and print the command.
+4. **Never invent an instance, job or build.** Instances come from
+   `~/.jenkins-cli/config.yaml`; jobs and builds come from the user's URLs.
+5. **Never edit `~/.jenkins-cli/config.yaml`.** That includes `allow_replay`:
+   the user turns Replay on themselves. If the config is missing or wrong,
+   tell them to run `jenkins init`.
+6. **Never read, print or copy the API token.** Don't run
+   `security find-generic-password ... -w`.
+7. **An AWS login is not something you can finish.** If the CLI starts
+   `aws sso login`, a browser opens and the user must approve it. Wait and tell them.
+8. **Trust the console log over `params.json`.** `params.json` marks each
+   value's `source`: `build` is what the build ran with; `default` is only
+   the job's default.
+9. **Don't overwrite earlier fetches** with `--force` unless the user wants a
+   fresh copy.
 
 ## Before the first command
 
-Run `jenkins --version`. If the command is not found, the CLI is not
-installed: point the user to the install steps in the project README (`docs/install.md`)
-(`pipx install git+https://github.com/devozz32/jenkins-cli.git`, then
-`jenkins init`) and stop. If `jenkins status` says there is no config, the
-user has to run `jenkins init` themselves.
+Run `jenkins --version`. If it is not found, point the user to
+`docs/install.md` in the project (`pipx install git+https://github.com/devozz32/jenkins-cli.git`,
+then `jenkins init`) and stop. If `jenkins status` says there is no config,
+the user has to run `jenkins init`.
 
-## Rules that prevent the common failures
+## Commands
 
-1. **Never invent an instance, job or build.** Instances come from
-   `~/.jenkins-cli/config.yaml`; jobs and builds come from the user's URLs.
-2. **Never hardcode a port, host, profile or instance ID.** The CLI reads
-   them from the config and picks a free port itself.
-3. **Never edit `~/.jenkins-cli/config.yaml` yourself.** If it is missing or
-   wrong, tell the user to run `jenkins init` (it is interactive and stores the
-   token in the Keychain).
-4. **Never read, print or copy the API token.** Do not run
-   `security find-generic-password ... -w`.
-5. **An AWS login is not something you can finish.** If the CLI starts
-   `aws sso login`, a browser opens and the user must approve it. Wait and tell them.
-6. **Trust the console log over `params.json` for what actually happened.**
-   `params.json` marks each value's `source`: `build` is what the build ran
-   with; `default` is only the job's default.
-7. **The output folder may already have older fetches.** Don't overwrite with
-   `--force` unless the user wants a fresh copy.
+| Command | Who runs it | What it does |
+|---|---|---|
+| `jenkins status` | you or user | config, connection (tunnels/ssm), Jenkins login |
+| `jenkins builds <job-url> [-n 20] [-p 1]` | you or user | build history: number, result, start, duration, who. `-p 2` = older |
+| `jenkins fetch <build-or-job-url> [-o dir] [--skip-aborted] [-f]` | you or user | save `params.json`, `config.xml`, `pipeline.groovy`, `pipeline.log` |
+| `jenkins browse [url]` | **user only** | full-screen Jenkins in the terminal: folders, jobs, last 15 builds, stages, params, log, `f` to fetch. Read-only |
+| `jenkins replay <build-url> [--script f] [--no-follow]` | **user only** | send the edited `pipeline.groovy` as a Replay of that build, after a diff and `[y/N]`. Runs once, follows the log, fetches the new build |
+| `jenkins init` / `jenkins skill ...` / `jenkins update` | **user only** | setup, this skill, self-update |
 
-## Workflow
+There is no command to trigger a build, and there won't be one.
+Not available yet: `log --grep`, `compare`, `list`, `clean`. Don't call them
+until `jenkins --help` lists them.
+
+## Workflow: why did a build fail?
 
 ```bash
-jenkins status                       # config, connection method, tunnel, Jenkins login
-jenkins fetch <build-url>            # one build
-jenkins fetch <job-url>              # latest build of the job
-jenkins fetch --skip-aborted <job-url>
-jenkins fetch <url> -o <dir>         # custom output folder
-jenkins -i <instance> fetch <url>    # pick an instance explicitly
-jenkins builds <job-url>             # history: which builds failed, when, who started them
+jenkins status                       # only if something looks wrong
+jenkins builds <job-url>             # "the last failed build": find its number here
+jenkins fetch <build-url>
 ```
 
-`fetch` prints `Connection: tunnels (<env>/<target>)` or `Connection: ssm`, then the
-output folder. A `WARNING: tunnels failed ... Falling back to plain SSM.` line means
-the tunnels target is broken but the fetch still worked over SSM; mention it in the
-report. The folder contains:
+`fetch` prints `Connection: tunnels (<env>/<target>)` or `Connection: ssm`, then
+`Output: <folder>`. A `WARNING: tunnels failed ... Falling back to plain SSM.`
+line means the fetch worked over SSM; mention it.
 
-| File | What it holds |
-|---|---|
-| `params.json` | parameters with type, default, choices, `value` and `source` (`build`/`default`) |
-| `config.xml` | job definition: SCM repo/branch/script path, triggers |
-| `pipeline.groovy` | the Jenkinsfile the build ran (from the replay page) |
-| `pipeline.log` | full console output |
+### Report back first (always, right after `fetch`)
 
-## Report back to the user (always, right after `fetch`)
+1. **Did the fetch work?** One line, plus how it connected.
+2. **Where are the files?** The folder from the `Output:` line (or
+   `<output_dir>/<job-name>-<build-number>/`, `output_dir` from `jenkins status`).
+   Confirm with `ls -la <folder>`. Give the full path in a code block.
+3. **What was saved:** a table of the 4 files with sizes. Say which ones are
+   missing or empty, or have a CLI warning.
+4. **The build at a glance:** result and the parameters it ran with, marking
+   empty values.
 
-Before any investigation, tell the user plainly what happened. Use this order:
-
-1. **Did the fetch work?** One line: "The fetch worked" or "The fetch failed",
-   and how it connected (`tunnels` or SSM, from the CLI output).
-2. **Where are the files?** Check it, don't assume it:
-   - Take the folder from the `Output:` line the CLI printed.
-   - If that line is missing (the fetch stopped early) or unclear, look up the
-     configured folder: `jenkins status` prints `Output dir`, or read
-     `output_dir` in `~/.jenkins-cli/config.yaml` (read only, never edit it).
-     The build folder is `<output_dir>/<job-name>-<build-number>/` unless `-o` was used.
-   - Run `ls -la <folder>` to confirm the folder and files really exist.
-   - Give the full path in a code block, plus `open <folder>` to open it in Finder.
-3. **What was saved:** a table with each of the 4 files, its size
-   (`ls -la <folder>`), and one line on what it holds. If a file is missing or
-   empty, or the CLI printed a warning for it (no permission for config.xml,
-   no Jenkinsfile on the replay page), say so in that row.
-4. **The build at a glance:** its result (SUCCESS / FAILURE / ABORTED /
-   IN_PROGRESS) and the parameters it ran with, marking empty values.
-
-Only then investigate, and only as far as the user asked. If they only asked
-to fetch, stop after the report and offer to look at why it failed.
-
-If the fetch itself failed, say so first, quote the error line, and give the
-fix from the table under "When something fails".
-
-## Investigating a build
-
-After `fetch`, work from the files with grep rather than reading whole logs:
+Then investigate, only as far as asked:
 
 ```bash
-grep -n "Finished:" pipeline.log                     # result
-grep -nE "ERROR|FAILED|Exception" pipeline.log | head
-grep -nE "Cloning repository|Checking out Revision" pipeline.log   # repos, branches, commits
-grep -n "^\[Pipeline\] { (" pipeline.log             # stage starts
-```
-
-To compare two builds, fetch both, then diff `pipeline.groovy`, the
-checked-out repos/branches, and the relevant log lines side by side.
-
-## Examples
-
-**"Fetch this: https://jenkins.example.internal/job/team/job/deploy/42/"**
-
-```bash
-jenkins fetch https://jenkins.example.internal/job/team/job/deploy/42/
-ls -la ~/jenkins-investigations/deploy-42/      # path from the Output: line
-```
-
-Then the report: "The fetch worked, connected through tunnels. Files are in
-`~/jenkins-investigations/deploy-42/`" + the file table + result and parameters.
-Stop there and offer to look into the result.
-
-**"Why did the latest build of deploy fail?"** (job URL, no build number)
-
-```bash
-jenkins fetch https://jenkins.example.internal/job/team/job/deploy/
-cd <output folder>
 grep -n "Finished:" pipeline.log
-grep -nE "ERROR|FAILED|Exception" pipeline.log | head
-grep -n "^\[Pipeline\] { (" pipeline.log       # which stage it was in
+grep -nE "ERROR:|FAILED|Exception" pipeline.log | head
+grep -n "^\[Pipeline\] { (" pipeline.log             # stages
+grep -nE "Cloning repository|Checking out Revision" pipeline.log
 ```
 
-Report first, then the cause: the error line, the stage, and the line in
-`pipeline.groovy` it points to. Check `params.json` for empty or default values
-that explain it.
+Give the cause as: the stage, the error line (`pipeline.log:<n>`), the line in
+`pipeline.groovy` it comes from, and any parameter in `params.json` that explains
+it. Also check `config.xml` when a parameter's value looks wrong. Choice lists
+built by a script (Active Choices: `org.biouno.unochoice`) fall back to their
+`secureFallbackScript` value when the script fails.
 
-**URLs copied from a view** (`.../view/My%20View/job/deploy/42`) work as they
-are. Pass them unchanged, with the `%20`; don't rewrite them.
+## Workflow: fix the pipeline and replay it (once)
 
-**"The latest one was aborted, get the one before"**
+Replay re-runs one build with an edited Jenkinsfile, **with the same
+parameters**. It can't change parameters, `config.xml` or the job setup. If
+the cause is a parameter or the job config, say that Replay won't help and
+stop.
+
+1. The build must be fetched; its folder has `pipeline.groovy`.
+2. Propose **one** change. Show it as a diff and explain it. Edit
+   `<folder>/pipeline.groovy` only after the user says yes. Change nothing else
+   (no reformatting, no unrelated fixes).
+3. Warn when the pipeline deploys or changes things (deploy, helm, kubectl,
+   terraform, push, tag, upload): Replay runs every stage for real.
+4. Give the user the command to run:
+
+   ```bash
+   jenkins replay <build-url>
+   ```
+
+   It shows the diff again, the parameters, and asks `[y/N]`. Then it runs
+   the build once, follows the log, and saves the new build to
+   `<output_dir>/<job>-<new-number>/`.
+5. If it says `replay is off for instance '<name>'`, the user has to add
+   `allow_replay: true` under that instance in `~/.jenkins-cli/config.yaml`
+   themselves. Tell them; don't edit it.
+6. **No loop.** One fix per request. When the user comes back with the
+   result, read the new build's folder (`pipeline.log`), report SUCCESS or the
+   new error, and stop. Propose another fix only if the user asks. That fix
+   goes in the **new** build's `pipeline.groovy` and is replayed with the new
+   build's URL.
+7. After a SUCCESS, remind them that the fix is not in git: it has to be
+   committed to the Jenkinsfile in the repo from `config.xml` (SCM URL and
+   script path), or the next normal build fails again.
+
+## Other examples
+
+**Compare build 41 and 42:** fetch both, then
 
 ```bash
-jenkins fetch --skip-aborted https://jenkins.example.internal/job/team/job/deploy/
+diff <folder-41>/pipeline.groovy <folder-42>/pipeline.groovy
+diff <(python3 -m json.tool <folder-41>/params.json) <(python3 -m json.tool <folder-42>/params.json)
+grep -nE "Checking out Revision" <folder-41>/pipeline.log <folder-42>/pipeline.log
 ```
 
-**"Compare build 41 and 42"**
+**When did it start failing?** `jenkins builds <job-url>` (then `-p 2`).
+Find the last SUCCESS before the failures, fetch it and the first failure,
+compare.
 
-```bash
-jenkins fetch https://jenkins.example.internal/job/team/job/deploy/41/
-jenkins fetch https://jenkins.example.internal/job/team/job/deploy/42/
-diff ~/jenkins-investigations/deploy-41/pipeline.groovy ~/jenkins-investigations/deploy-42/pipeline.groovy
-diff <(python3 -m json.tool ~/jenkins-investigations/deploy-41/params.json) \
-     <(python3 -m json.tool ~/jenkins-investigations/deploy-42/params.json)
-grep -nE "Checking out Revision" ~/jenkins-investigations/deploy-4{1,2}/pipeline.log
-```
+**The latest was aborted:** `jenkins fetch --skip-aborted <job-url>`.
 
-**"When did this job start failing?"**
+**View URLs** (`.../view/My%20View/job/deploy/42`) work as they are; keep the `%20`.
 
-```bash
-jenkins builds https://jenkins.example.internal/job/team/job/deploy/        # newest 20
-jenkins builds https://jenkins.example.internal/job/team/job/deploy/ -p 2   # the 20 before
-```
-
-Find the last SUCCESS before the failures, then fetch that build and the first
-failed one and compare them. Page instead of raising `-n` above what you need.
-
-**"Fetch 42 again"** (folder already exists)
-
-The CLI stops with `already exists (use --force to overwrite)`. Ask the user:
-overwrite (`-f`), or keep both (`-o ~/jenkins-investigations/deploy-42-new`).
-
-**"Is Jenkins reachable?"**
-
-```bash
-jenkins status
-```
-
-Expect `Jenkins : OK as <user>`. Anything else: use the table below.
+**The user wants to look around Jenkins:** suggest `jenkins browse` (or
+`jenkins browse <folder-or-job-url>`): arrows and Enter, `f` fetches the
+selected build, `q` quits.
 
 ## When something fails
 
 | What you see | What it means | What to do |
 |---|---|---|
-| `no config file found` / `run: jenkins init` | Not set up | Ask the user to run `jenkins init` |
+| `no config file found` / `run: jenkins init` | Not set up | User runs `jenkins init` |
 | `no Keychain item` | Token not stored | `jenkins init` again |
-| `AWS session ... expired - starting 'aws sso login'` | SSO expired | Tell the user to approve in the browser |
+| `AWS session ... expired - starting 'aws sso login'` | SSO expired | User approves in the browser |
 | `Session Manager plugin is not installed` | Missing dependency | `brew install --cask session-manager-plugin` |
-| `WARNING: tunnels failed ... Falling back to plain SSM` | tunnels target broken, SSM used | Fetch is fine; tell the user to check `tunnels logs <env> <target>` |
-| `SSM tunnel did not come up` | Jump host or permissions | Report the message; don't retry blindly |
-| `HTTP 401/403` | Bad token or no permission | Check user/token with `jenkins status` |
+| `WARNING: tunnels failed ... Falling back to plain SSM` | tunnels target broken | Fetch is fine; user checks `tunnels logs <env> <target>` |
+| `SSM tunnel did not come up` | Jump host or permissions | Report it; don't retry blindly |
+| `HTTP 401/403` | Bad token or no permission | `jenkins status` |
 | `not found: /job/...` | Wrong URL | Re-check the URL with the user |
-| `already exists (use --force ...)` | Folder from an earlier fetch | Ask before overwriting |
-
-## Commands
-
-| Command | What it does |
-|---|---|
-| `jenkins status` | Check config, tunnel and Jenkins login |
-| `jenkins fetch <url> [-o dir] [--skip-aborted] [-f]` | Save the 4 files for a build |
-| `jenkins builds <job-url> [-n 20] [-p 1]` | Build history: number, result, start, duration, who. `-p 2` = older |
-| `jenkins browse [url]` | Interactive Jenkins UI for the **user** (folders, jobs, last 15 builds, stages, log). Never run it yourself |
-| `jenkins init [--name N]` | Interactive setup (user runs it, not Claude) |
-| `jenkins --version` / `jenkins update [--check]` | Version / self-update from GitHub |
-| `jenkins skill [install\|uninstall]` | Install or remove this skill (user runs it) |
-
-`jenkins browse` is an interactive full-screen UI for people. **Do not run it**
-(it waits for keys); use `builds` and `fetch`. Suggest it to the user when they
-want to look around Jenkins themselves.
-
-Planned, **not available yet**: `log --grep`, `compare`, `list`, `clean`.
-Do not call them until `jenkins --help` lists them.
+| `already exists (use --force ...)` | Earlier fetch | Ask: overwrite (`-f`) or keep both (`-o <new-dir>`) |
+| `refused: '...' changes Jenkins` | An action URL was passed | Pass the job or build URL |
+| `replay is off for instance` | `allow_replay` not set | User sets it in the config |
+| `no local copy: .../pipeline.groovy` | Build not fetched | `jenkins fetch <build-url>` first |
+| `HTTP 403 ... no Replay permission` | User lacks Run/Replay on the job | Ask a Jenkins admin |

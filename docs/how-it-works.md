@@ -53,8 +53,8 @@ format refreshes silently: see [install](install.md#6-aws-sso-login).
 Every request goes through one method in `jenkins_cli/api.py`, and it checks
 three things before anything is sent:
 
-- **GET only.** The method is fixed and no request body is ever attached, so
-  there is no POST, PUT or DELETE in the code at all.
+- **GET only.** The method is fixed and no request body is ever attached. The
+  only POST in the code is a separate method for `jenkins replay`, below.
 - **No action URLs.** A path that names a Jenkins action is refused with
   `refused: '<action>' changes Jenkins and this CLI is read-only`. The list
   covers `build`, `buildWithParameters`, `stop`, `kill`, `term`, `doDelete`,
@@ -67,6 +67,21 @@ three things before anything is sent:
 
 Reading the replay page (for the Jenkinsfile) is a GET of the form; nothing is
 replayed.
+
+### The one exception: `jenkins replay`
+
+`replay_post()` in `api.py` is the only method that sends a POST. It accepts
+exactly one shape of path, `<job>/<build-number>/replay/run`, and nothing else
+(no `build`, no `buildWithParameters`, no `stop`). The command around it:
+
+- refuses unless the instance has `allow_replay: true` in the config;
+- refuses without a terminal, so a script or an agent can't confirm it;
+- refuses when the local `pipeline.groovy` is the same as the build's script;
+- shows the diff and the parameters (Replay keeps the original build's
+  parameters), and asks `[y/N]`. There is no `--yes`;
+- sends one POST, then only GETs: it finds the new build by its cause
+  (`Replayed #<n>`), follows `logText/progressiveText` every 2 s, and saves the
+  new build like `fetch`. It never retries.
 
 ## What each command asks Jenkins for
 

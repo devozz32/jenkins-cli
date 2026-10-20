@@ -30,8 +30,12 @@ from your terminal or from an AI agent.**
   with the arrow keys, and shows stages, parameters, the log and the
   Jenkinsfile. No browser, no copying URLs.
 - **read-only, enforced.** The client sends only GET requests and refuses any
-  URL that names a Jenkins action (`build`, `stop`, `doDelete`, `replay/run`,
-  ...). Nothing is triggered, replayed or deleted.
+  URL that names a Jenkins action (`build`, `stop`, `doDelete`, `rebuild`,
+  ...). Nothing is triggered, stopped or deleted.
+- **one exception, off by default: Replay.** Fix a failed build's Jenkinsfile
+  locally, then `jenkins replay <build-url>` shows the diff, asks `[y/N]`, runs
+  it once and follows the log. Only you can start it, in a terminal, with
+  `allow_replay: true` set for that Jenkins.
 - **gentle on the server.** One small request per screen, cached, about 5
   requests per second at most, and never a background poll.
 - **works with or without [`tunnels`](https://github.com/Zivgl66/tunnels).**

@@ -32,6 +32,7 @@ A commented copy: [`jenkins_cli/config.example.yaml`](../jenkins_cli/config.exam
 | `instances.<name>.url` | yes | Jenkins base URL |
 | `instances.<name>.user` | yes | Your Jenkins user name |
 | `instances.<name>.token` | yes | `keychain:<item>` or `env:<VAR>`. See [the token](#the-token) |
+| `instances.<name>.allow_replay` | no | `true` lets `jenkins replay` send an edited Jenkinsfile to this Jenkins. Default: off. Set it by hand; `init` never asks, and keeps it when re-run |
 | `tunnel.tunnels_target` | one of the two | `<env>/<target>` in the [`tunnels`](https://github.com/Zivgl66/tunnels) config |
 | `tunnel.ssm.profile` | one of the two | AWS profile from `~/.aws/config` |
 | `tunnel.ssm.region` | with `ssm` | Region of the jump host |
